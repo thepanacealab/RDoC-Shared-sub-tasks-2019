@@ -4,8 +4,8 @@ import re
 import itertools 
 import time
 import os
+import io
 import gensim
-import re
 import math
 import sys
 import numpy as np
@@ -26,23 +26,30 @@ def load_stop_words():
 stop_words2 = load_stop_words()
 
 
-#load word2vec
-#word2vec_model = Word2Vec.load('/mnt/local/hdd/Javadr/trained_models/Word2Vec/300/wiki/word2vec.bin')
+#from gensim.models import KeyedVectors#BioSentVec_PubMed_MIMICIII-bigram_d700.bin
+#print(1)
+#word2vec_model = KeyedVectors.load_word2vec_format('/mnt/local/hdd/Javadr/trained_models/pubmed2018_w2v_200D/pubmed2018_w2v_200D.bin', binary=True)
+#word2vec_model = Word2Vec.load('/mnt/local/hdd/Javadr/trained_models/Word2Vec/200/Word2Vec_Model.bin')
+
+#print(2)
+
 
 
 #load sent2vec
+print(1)
 sent2vec_model = sent2vec.Sent2vecModel()
-sent2vec_model.load_model('/mnt/local/hdd/Javadr/trained_models/Sen2Vec/700/sent2vec_twitter_bigrams.bin')
-
+sent2vec_model.load_model('/mnt/local/hdd/Javadr/trained_models/Sen2Vec/700/sent2vec_wiki_bigrams.bin')#sent2vec_twitter_bigrams.bin
+print(2)
 
 def remove_special_characters(text):
-	return re.sub("([{}@\"$%&\\\/*'\"]|\d)", ' ', text)
+	return re.sub("([{}@\"$%+=<>,&\\\/*'\"]|\d)", ' ', text)
 
 def pre_process(content, dd = 0):
 	content = content.replace('\n',' ')
 	content = content.replace('	',' ')
 	content = content.lower()
 	content=remove_special_characters(content)
+	
 	while '  ' in content:
 		content=content.replace('  ',' ')
 	word_tokens = content.split(' ')
@@ -85,7 +92,7 @@ def word2vec_Local(abstract):
 
 def wordTovec2(sentence):
 	global word2vec_model
-	vocab = list(word2vec_model.dictionary.keys())
+	vocab = word2vec_model.keys()
 	word_tokens = sentence.split(' ') # or  word_tokens = word_tokenize(sentence)
 	i =0
 	v = [0]*size0fvector
@@ -93,10 +100,12 @@ def wordTovec2(sentence):
 		if word in vocab:
 			if i ==0:
 				#print('yes')
-				v = word2vec_model.word_vectors[word2vec_model.dictionary[word]]
+				v = word2vec_model[word]
 			else:
-				v = np.add(v,word2vec_model.word_vectors[word2vec_model.dictionary[word]])
+				v = np.add(v,word2vec_model[word])
 			i = i+1
+	#if i ==0:
+	#	print(v,word_tokens)
 	#print(v)
 	#print(sentence)	
 	#x = int(input('Enter a number:'))
@@ -114,6 +123,17 @@ def glove_Local(abstract):
 	#print(list(glove.dictionary.keys()))
 	return glove
 
+def loadGloveModel(gloveFile):
+	f = io.open(gloveFile, 'r', encoding='utf-8', newline='\n', errors='ignore')
+	f.readline()
+	glob_model = {}
+	for line in f:
+		splitLine = line.rstrip().split()
+		word = splitLine[0]
+		embedding = np.array(splitLine[1:])
+		glob_model[word] = embedding.astype(np.float)
+	return glob_model
+
 def sentTovec(sentence):
 	global sent2vec_model
 	return sent2vec_model.embed_sentence(sentence)
@@ -121,13 +141,20 @@ def sentTovec(sentence):
 def similarity(v1,v2):
 	return (1 - spatial.distance.cosine(v1, v2))
 
-
-
 paths = ['Acute_Threat_Fear.csv','Loss.csv','Arousal.csv','Circadian_Rhythms.csv','Frustrative_Nonreward.csv','Potential_Threat_Anxiety_.csv','Sleep_Wakefulness.csv','Sustained_Threat.csv']
-constructs = ['Acute Threat Fear','Loss','Arousal','Circadian Rhythms','Frustrative Nonreward','Potential Threat Anxiety','Sleep Wakefulness','Sustained Threat']
+constructs = ['acute threat fear','loss','arousal','circadian rhythms','frustrative nonreward','potential threat anxiety','sleep wakefulness','sustained threat']
 construct_extra = ['loss is a state of deprivation of a motivationally significant con-specific, object, or situation','acute threat fear is Activation of the brain’s defensive motivational system to promote behaviors that protect the organism from perceived danger','frustrative nonreward is reactions elicited in response to withdrawal prevention of reward','potential threat anxiety is activation of a brain system in which harm may potentially occur but is distant, ambiguous, or uncertain in probability, characterized by a pattern of responses such as enhanced risk assessment ','Sleep and wakefulness are endogenous, recurring, behavioral states that reflect coordinated changes in the dynamic functional organization of the brain','sustained threat is an aversive emotional state caused by prolonged exposure to internal or external condition, state, or stimuli that are adaptive to escape or avoid.','Arousal is a continuum of sensitivity of the organism to stimuli, external and internal.','Circadian Rhythms are endogenous self-sustaining oscillations that organize the timing of biological systems to optimize physiology and behavior, and health']
 ################
 size0fvector=700
+
+'''
+print(1)
+word2vec_model = loadGloveModel('/mnt/local/hdd/Javadr/trained_models/Word2Vec/glove/glove.840B.300d.txt')#glove.840B.300d.txt
+print(2)
+'''
+
+#/home/javadr/code/RdoC
+#/mnt/local/hdd/Javadr/trained_models
 ################
 avg=0.0
 for vv in range(len(paths)):
@@ -135,7 +162,7 @@ for vv in range(len(paths)):
 
 	csvfile = open(path)
 	readCSV = csv.reader(csvfile, delimiter=',')
-
+	print(path)
 	i =0
 	count = 0
 	#####################
@@ -162,17 +189,19 @@ for vv in range(len(paths)):
 		del sentences[-1]
 		sim_dict={}
 		################
-		original = abstract #constructs[vv]
+		original = constructs[vv] #constructs[vv]
 		################
 		for sentence in sentences:
 			######################################################################################################
-			sim_dict [sentence] = similarity(sentTovec(pre_process(sentence)),sentTovec(pre_process(original))) 
+			sim_dict [sentence] = similarity(sentTovec(pre_process(sentence)),sentTovec(original)) 
 			######################################################################################################
 		sim_dict = {k:v for k, v in sorted(sim_dict.items(), key=lambda t: t[1],reverse=True)}
 	
 		sentence = ''
 		for key, value in sim_dict.items():
-			sentence = key
+			if len(pre_process(key)) <= 70:
+				continue
+			sentence = pre_process(key)
 			break
 	
 	
@@ -181,7 +210,7 @@ for vv in range(len(paths)):
 			if item.endswith('.'):
 				item = item[0:len(item)-1]
 			cc =0.0		
-			sentence_tokens = pre_process(sentence).split(' ')
+			sentence_tokens = sentence.split(' ')
 			item_tokens = pre_process(item).split(' ')
 			for token in sentence_tokens:
 				if token in item_tokens:
@@ -189,10 +218,10 @@ for vv in range(len(paths)):
 			cc = cc/len(sentence_tokens)
 			if (_max_<cc):
 				_max_ = cc
-		#print(i,_max_)
+		print(i,_max_)
 		if _max_ >= 0.6:
 			count = count + 1
-		#print(sentence)
+		print(sentence)
 		#x = int(input('Enter a number:'))
 	print(constructs[vv]+" : "+ str(count/(i-1)))
 	avg = avg + count/(i-1)
